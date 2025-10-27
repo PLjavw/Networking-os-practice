@@ -1,0 +1,309 @@
+Get-NetAdapter
+Get-NetRoute | Sort-Object DestinationPrefix
+Test-NetConnection -ComputerName 8.8.8.8
+Get-NetTCPConnection | Select-Object -First 10
+
+Tasks
+
+Identify your default gateway and DNS servers
+Find a listening service and the owning process
+Sketch a simple diagram of your VM’s topology (interfaces, gateway)
+Success criteria
+
+You can list interfaces/routes and explain at least three TCP states (LISTEN, ESTABLISHED, TIME_WAIT)
+text
+
+
+File: labs/02_packet_capture.md
+```markdown
+# Lab 02: Packet Capture & Analysis
+
+Objectives
+- Capture packets safely on loopback or host-only networks
+- Identify TCP handshake and simple HTTP traffic
+
+Linux
+```bash
+# Terminal 1: start a simple HTTP server
+python3 -m http.server 8000
+
+# Terminal 2: capture loopback HTTP
+sudo tcpdump -i lo port 8000 -w http.pcap
+# Ctrl+C after a few requests
+
+# Inspect
+tshark -r http.pcap -Y "http" -T fields -e http.request.method -e http.request.uri | head
+Windows
+
+Start PowerShell: python -m http.server 8000
+In Wireshark: Capture on loopback, filter: tcp.port == 8000
+Stop capture and follow TCP stream for an HTTP request
+Questions
+
+Which packets form the 3-way handshake?
+What is the HTTP method and URI?
+Which side initiated the connection?
+Stretch
+
+Add curl http://127.0.0.1:8000 and find it in the capture
+text
+
+
+File: labs/03_socket_programming.md
+```markdown
+# Lab 03: Socket Programming (TCP echo)
+
+Objectives
+- Write a minimal TCP echo server and client
+- Observe connections and traffic while they run
+
+Example (Python)
+```python
+# server.py
+import socket
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.bind(("127.0.0.1", 9000))
+s.listen()
+print("listening on 127.0.0.1:9000")
+conn, addr = s.accept()
+with conn:
+    print("client:", addr)
+    while True:
+        data = conn.recv(4096)
+        if not data: break
+        conn.sendall(data)
+Python
+
+# client.py
+import socket
+c = socket.create_connection(("127.0.0.1", 9000))
+c.sendall(b"hello\n")
+print(c.recv(4096))
+c.close()
+Observe
+
+Linux: ss -tuna | grep :9000
+Windows: Get-NetTCPConnection | ? LocalPort -eq 9000
+Capture (optional)
+
+sudo tcpdump -i lo port 9000 -A -c 10 or Wireshark loopback
+Success
+
+Client prints echoed data; you can identify the connection in OS tools
+text
+
+
+File: labs/04_firewalling.md
+```markdown
+# Lab 04: Host Firewalling
+
+Objectives
+- Configure host firewall rules to allow/deny traffic to your echo server
+
+Linux (ufw)
+```bash
+sudo ufw status
+sudo ufw default deny incoming
+sudo ufw allow 9000/tcp
+sudo ufw reload
+ss -tulpen | grep :9000
+Windows (PowerShell)
+
+PowerShell
+
+# Deny inbound by default is recommended
+Get-NetFirewallProfile
+
+# Allow inbound 9000/TCP
+New-NetFirewallRule -DisplayName "Allow 9000 TCP" -Direction Inbound -Protocol TCP -LocalPort 9000 -Action Allow
+Get-NetFirewallRule | ? DisplayName -like "*9000*"
+Test
+
+From the same host: nc 127.0.0.1 9000 (Linux) or Test-NetConnection -Port 9000 (Windows)
+Toggle the rule off and confirm connection fails
+Stretch
+
+Limit to loopback only (Linux: bind to 127.0.0.1; Windows: use LocalAddress in the rule)
+text
+
+
+File: labs/05_process_socket_mapping.md
+```markdown
+# Lab 05: Process ↔ Socket Mapping (procfs and APIs)
+
+Objectives
+- Understand how to map network sockets to PIDs/process names
+- Explore Linux `/proc/net/*` and PID FD links; compare with Windows commands
+
+Linux
+```bash
+# View raw socket tables
+head -n 5 /proc/net/tcp
+head -n 5 /proc/net/udp
+
+# Find inode for a listening socket from ss
+sudo ss -tulpen | grep :9000
+
+# Map inode -> PID via /proc/<pid>/fd
+PID=$(pgrep -f server.py)
+ls -l /proc/$PID/fd | grep socket:
+cat /proc/$PID/comm
+Windows
+
+PowerShell
+
+# Socket table with PIDs
+netstat -ano | Select-String ":9000"
+# Map PID to process
+Get-Process -Id <PID>
+Build idea (optional project)
+
+Implement a simple “connection inspector” CLI that prints proto, state, local→remote, PID, process.
+Start with Linux by parsing /proc/net and mapping inode→PID; add Windows later via Get-NetTCPConnection or IP Helper API.
+Success
+
+You can explain how the OS ties sockets to processes on Linux and Windows
+text
+
+
+File: labs/06_incident_response.md
+```markdown
+# Lab 06: Incident Response Triage (Host)
+
+Objectives
+- Collect quick triage data: processes, network connections, and logs
+
+Linux
+```bash
+date
+hostname -f
+who
+ss -tupna | head -n 30
+ps -eo pid,ppid,user,%cpu,%mem,cmd --sort=-%cpu | head -n 20
+journalctl -n 200 --no-pager
+Windows (PowerShell)
+
+PowerShell
+
+Get-Date
+hostname
+quser
+Get-NetTCPConnection | Select-Object -First 30
+Get-Process | Sort-Object CPU -Descending | Select-Object -First 20
+Get-WinEvent -LogName System -MaxEvents 100
+Questions
+
+Which unexpected listening services exist?
+Any spikes in CPU/memory tied to network activity?
+Deliverable
+
+A short triage note: key findings, timestamps, and next steps
+text
+
+
+File: labs/07_dns_security.md
+```markdown
+# Lab 07: DNS Security Basics
+
+Objectives
+- Inspect resolver configuration, query behavior, and experiment with DoH
+
+Linux
+```bash
+cat /etc/resolv.conf
+dig A example.com @1.1.1.1 +dnssec
+Windows
+
+PowerShell
+
+Get-DnsClientServerAddress
+Resolve-DnsName example.com
+Tasks
+
+Add a hosts file override (127.0.0.1 example.local) and verify resolution
+Compare latency to two different resolvers
+Read about DoH/DoT trade-offs and logging implications
+Stretch
+
+Run a local caching resolver in a container (e.g., Unbound) and point your system to it
+text
+
+
+File: labs/08_ids_intro.md
+```markdown
+# Lab 08: IDS Intro with Zeek
+
+Objectives
+- Use Zeek to passively log network metadata in a lab capture
+
+Setup (Linux)
+```bash
+# Containerized run (example)
+docker run --rm -v "$PWD:/pcaps" zeek/zeek zeek -r /pcaps/http.pcap
+# Logs will be in the working directory (conn.log, http.log)
+Tasks
+
+Examine conn.log and http.log
+Correlate with your Lab 02 HTTP capture
+Identify client/server roles and bytes transferred
+Stretch
+
+Create a simple Zeek notice policy for cleartext credentials (on synthetic/test traffic only)
+text
+
+
+File: labs/09_container_networking.md
+```markdown
+# Lab 09: Container Networking
+
+Objectives
+- Observe how Docker/Podman sets up NAT and bridges
+- Capture traffic between containers
+
+Linux
+```bash
+docker network ls
+docker network inspect bridge | jq '.[0].IPAM.Config'
+
+# Run two containers and connect
+docker run -d --name web -p 8080:80 nginx:alpine
+docker run --rm --name curl --network bridge curlimages/curl:8.8.0 curl -I http://web
+
+# Observe NAT
+ip a | grep docker
+sudo iptables -t nat -L -n | grep DOCKER || sudo nft list ruleset | less
+
+# Capture
+sudo tcpdump -i any host 172.17.0.2 -c 20
+Questions
+
+Where is NAT applied?
+How does port publishing (8080:80) work?
+text
+
+
+File: labs/10_ci_cd_security.md
+```markdown
+# Lab 10: CI/CD Security (GitHub)
+
+Objectives
+- Add lightweight CI to lint Markdown and prevent secrets in commits
+
+Steps
+1) Enable GitHub branch protection (require PRs)
+2) Add secret scanning alerts in repo settings
+3) Add a basic workflow `.github/workflows/ci.yml` (example):
+```yaml
+name: ci
+on: [push, pull_request]
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: avto-dev/markdown-lint@v1
+Add a .gitignore and verify no pcaps or artifacts are committed
+Review Dependabot alerts and updates
+Stretch
+
+Add a job that fails if secrets are detected (e.g., gitleaks action)
