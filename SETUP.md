@@ -28,3 +28,26 @@ sudo apt update
 sudo apt install -y wireshark tcpdump nmap nftables ufw iproute2 iputils-ping \
   netcat-openbsd curl jq net-tools htop whois dnsutils python3 python3-pip
 # Optional: Zeek, Suricata via package or container later
+
+
+
+Allow non-root capture (optional): add your user to the wireshark group and re-login.
+
+Windows
+
+Install: Wireshark (with Npcap), Windows Terminal, Sysinternals Suite (Sysmon optional)
+PowerShell modules: Install-Module -Name PSWindowsUpdate -Scope CurrentUser (optional)
+Ensure “Windows Defender Firewall” is enabled
+Containers (optional)
+
+Bash
+
+# Docker or Podman
+sudo apt install -y docker.io || sudo dnf install -y podman
+# Verify
+docker run --rm hello-world
+Test checklist
+Linux: ip a, ip route, ss -tuna, sudo tcpdump -i any -c 5
+Windows: Get-NetAdapter, Get-NetRoute, Get-NetTCPConnection, Wireshark loopback capture
+Both VMs can ping each other on the host-only network
+
