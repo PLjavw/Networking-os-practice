@@ -307,3 +307,7 @@ Review Dependabot alerts and updates
 Stretch
 
 Add a job that fails if secrets are detected (e.g., gitleaks action)
+
+
+
+That’s it. Want me to push these into a new GitHub repo for you, or add a specific lab (e.g., the cross-platform “xnetstat” project) with code next?
